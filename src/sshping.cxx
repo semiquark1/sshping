@@ -72,6 +72,7 @@
 uint64_t		t0;
 uint64_t		t1;
 bool            delimited    = false;
+bool            bits         = false;
 bool            human        = false;
 bool            key_wait     = false;
 bool            ping_summary = false;
@@ -106,6 +107,7 @@ struct Arg
 // CLI options and usage help
 enum  { opNONE,
         opBIND,
+        opBITS,
         opNUM,
         opCTIM,
         opDLM,
@@ -130,6 +132,7 @@ const option::Descriptor usage[] = {
     {opNONE, 0, "",  "",              Arg::None,     " " },
     {opNONE, 0, "",  "",              Arg::None,     "Options:" },
     {opBIND, 0, "b", "bindaddr",      Arg::Reqd,     "  -b  --bindaddr IP    Bind to this source address"},
+    {opBITS, 0, "", "bits",           Arg::None,     "      --bits           Display speed as bits/s instead of bytes/s"},
     {opNUM,  0, "c", "count",         Arg::Reqd,     "  -c  --count NCHARS   Number of characters to echo, default 1000"},
     {opDLM,  0, "d", "delimited",     Arg::None,     "  -d  --delimited      Use delimiters in big numbers, eg 1,234,567"},
     {opECMD, 0, "e", "echocmd",       Arg::Reqd,     "  -e  --echocmd CMD    Use CMD for echo command; default: cat > /dev/null"},
@@ -746,6 +749,14 @@ int run_upload_test(ssh_session ses) {
     }
     printf("Upload-Size:       %17s\n", fmtnum(size * MEGA, 0, "B").c_str());
 
+    int multiplier = 1;
+    char speedunit[4] = "B/s";
+
+    if (bits) {
+        multiplier = 8;
+	speedunit[0] = 'b';
+    }
+
     ssh_scp scp = ssh_scp_new(ses, SSH_SCP_WRITE, remfile);
     if (scp == NULL) {
         fprintf(stderr, "*** Cannot allocate scp context: %s\n", ssh_get_error(ses));
@@ -792,9 +803,9 @@ int run_upload_test(ssh_session ses) {
     uint64_t t3 = get_time();
     double duration = double(nsec_diff(t3, t2)) / GIGAF;
     if (duration == 0.0) duration = 0.000001;
-    uint64_t Bps = static_cast<uint64_t>(static_cast<double>(size * MEGA) / duration);
+    uint64_t Bps = static_cast<uint64_t>(static_cast<double>(size * MEGA * multiplier) / duration);
 
-    printf("Upload-Rate:       %19s\n", fmtnum(Bps, 0, "B/s").c_str());
+    printf("Upload-Rate:       %19s\n", fmtnum(Bps, 0, speedunit).c_str());
     if (verbosity) {
         printf("+++ Upload speed test completed\n");
     }
@@ -815,6 +826,13 @@ int run_download_test(ssh_session ses) {
     char* buf = new char[DLBUF_SIZE];
     size_t avail = 0;
     size_t remaining = size * MEGA;
+    int multiplier = 1;
+    char speedunit[4] = "B/s";
+
+    if (bits) {
+        multiplier = 8;
+	speedunit[0] = 'b';
+    }
 
     uint64_t t2 = get_time();
     while (remaining) {
@@ -879,9 +897,9 @@ int run_download_test(ssh_session ses) {
     uint64_t t3 = get_time();
     double duration = double(nsec_diff(t3, t2)) / GIGAF;
     if (duration == 0.0) duration = 0.000001;
-    uint64_t Bps = static_cast<uint64_t>(static_cast<double>(size * MEGA) / duration);
+    uint64_t Bps = static_cast<uint64_t>(static_cast<double>(size * MEGA * multiplier) / duration);
 
-    printf("Download-Rate:     %19s\n", fmtnum(Bps, 0, "B/s").c_str());
+    printf("Download-Rate:     %19s\n", fmtnum(Bps, 0, speedunit).c_str());
     if (verbosity) {
         printf("+++ Download speed test completed\n");
     }
@@ -984,6 +1002,7 @@ int main(int   argc,
     }
 
     // Setup options
+    bits      = opts[opBITS];
     human     = opts[opHUMAN];
     delimited = opts[opDLM];
     ping_summary = opts[opPING];
